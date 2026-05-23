@@ -1,0 +1,27 @@
+{
+  "name": "@gabi/generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gabi/core": "workspace:*",
+    "@gabi/introspector": "workspace:*",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

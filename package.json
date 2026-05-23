@@ -1,0 +1,27 @@
+{
+  "name": "gabi",
+  "private": true,
+  "version": "0.1.0",
+  "description": "GABI — Geo-Aplicações & Business Intelligence Framework",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @gabi/api db:migrate",
+    "db:seed": "pnpm --filter @gabi/api db:seed",
+    "gabi": "node packages/cli/dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

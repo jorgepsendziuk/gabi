@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: gabi-postgres
+    environment:
+      POSTGRES_USER: gabi
+      POSTGRES_PASSWORD: gabi
+      POSTGRES_DB: gabi
+    ports:
+      - '5432:5432'
+    volumes:
+      - gabi_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gabi -d gabi']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: gabi-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - gabi_redis_data:/data
+
+volumes:
+  gabi_pg_data:
+  gabi_redis_data:
