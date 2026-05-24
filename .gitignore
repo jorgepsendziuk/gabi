@@ -8,3 +8,4 @@ apps/api/.env.local
 .DS_Store
 coverage
 out
+public

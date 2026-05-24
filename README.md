@@ -78,15 +78,19 @@ pnpm dev
 
 **Login padrão:** `admin@gabi.local` / `admin123`
 
-## Deploy na Vercel (admin)
+## Deploy na Vercel (admin + API no mesmo domínio)
 
-O build do Vite gera **`apps/admin/dist`**, não `public`. O `vercel.json` na raiz já aponta para isso.
+O `vercel.json` na **raiz do repositório** faz deploy unificado ([Express on Vercel](https://vercel.com/docs/frameworks/backend/express)):
 
-1. **Root Directory:** deixe vazio (raiz do repo) ou `apps/admin` (usa o `vercel.json` local).
-2. **Output Directory:** não use `public` — deixe o `vercel.json` definir (`apps/admin/dist` ou `dist`).
-3. **Variável de ambiente:** `VITE_API_URL` = URL pública da API (ex.: `https://sua-api.railway.app`).
+1. **Root Directory:** raiz do repo (não use só `apps/admin`).
+2. **Build:** compila API + admin e copia o painel para `public/`.
+3. **Variáveis de ambiente** (Settings → Environment Variables), as mesmas de `apps/api/.env.example`:
+   - `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL`
+   - `JWT_SECRET`, `CONNECTION_SECRET`
+   - `CORS_ORIGIN` = `https://gabi-xi.vercel.app` (opcional; `VERCEL_URL` também é aceito)
+4. **Não** precisa de `VITE_API_URL` neste modo — o front chama `/api` no mesmo host.
 
-A API (`apps/api`) pode ser hospedada em **Cloud Run** (Dockerfile na raiz), Railway, Render, Fly.io, etc.
+Alternativa: só o admin na Vercel com `VITE_API_URL` apontando para API em Cloud Run / Railway (`apps/admin/vercel.json`).
 
 ### Deploy na Google Cloud Run (API)
 

@@ -2,6 +2,7 @@ import { useLogin } from '@refinedev/core';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert, Button, Card, Field, Input, tokens } from '@gabi/ui';
+import { isApiMisconfigured } from '../lib/api';
 
 export function LoginPage() {
   const { mutate: login } = useLogin();
@@ -40,6 +41,13 @@ export function LoginPage() {
             <h1 className="text-xl font-bold text-gabi-primary m-0">GABI Framework</h1>
             <p className="text-sm text-gabi-muted mt-1 mb-0">Entre para continuar</p>
           </div>
+
+          {isApiMisconfigured() && (
+            <Alert variant="danger" className="mb-4">
+              <strong>API não configurada.</strong> Defina <code>VITE_API_URL</code> no deploy ou use
+              o <code>vercel.json</code> da raiz do repo (admin + API no mesmo domínio).
+            </Alert>
+          )}
 
           {error && (
             <Alert variant="danger" className="mb-4">

@@ -114,6 +114,36 @@ connectionsRouter.get(
   },
 );
 
+connectionsRouter.post('/test', requirePermission('connections', 'manage'), async (req, res, next) => {
+  try {
+    const body = testSchema.parse(req.body);
+    const result = await testConnectionConfig({
+      host: body.host,
+      port: body.port,
+      database: body.database,
+      user: body.user,
+      password: body.password,
+      ssl: body.ssl,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+connectionsRouter.post(
+  '/:id/test',
+  requirePermission('connections', 'read'),
+  async (req, res, next) => {
+    try {
+      const id = typeof req.params.id === 'string' ? req.params.id : req.params.id[0]!;
+      res.json(await testConnectionById(id));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 connectionsRouter.get('/:id', requirePermission('connections', 'read'), async (req, res, next) => {
   try {
     const id = typeof req.params.id === 'string' ? req.params.id : req.params.id[0]!;
@@ -193,33 +223,3 @@ connectionsRouter.delete('/:id', requirePermission('connections', 'manage'), asy
     next(err);
   }
 });
-
-connectionsRouter.post('/test', requirePermission('connections', 'manage'), async (req, res, next) => {
-  try {
-    const body = testSchema.parse(req.body);
-    const result = await testConnectionConfig({
-      host: body.host,
-      port: body.port,
-      database: body.database,
-      user: body.user,
-      password: body.password,
-      ssl: body.ssl,
-    });
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
-
-connectionsRouter.post(
-  '/:id/test',
-  requirePermission('connections', 'read'),
-  async (req, res, next) => {
-    try {
-      const id = typeof req.params.id === 'string' ? req.params.id : req.params.id[0]!;
-      res.json(await testConnectionById(id));
-    } catch (err) {
-      next(err);
-    }
-  },
-);
