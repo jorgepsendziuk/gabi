@@ -1,5 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "VERCEL",
+    "GABI_VERCEL_UNIFIED",
+    "VITE_VERCEL_UNIFIED",
+    "VITE_API_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

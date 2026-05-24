@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm turbo build --filter=@gabi/api --filter=@gabi/admin && node scripts/copy-admin-public.mjs",
+  "buildCommand": "GABI_VERCEL_UNIFIED=1 VITE_VERCEL_UNIFIED=1 pnpm turbo build --filter=@gabi/api --filter=@gabi/admin && node scripts/copy-admin-public.mjs",
   "framework": null,
   "env": {
     "GABI_VERCEL_UNIFIED": "1",
