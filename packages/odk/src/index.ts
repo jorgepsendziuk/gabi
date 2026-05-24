@@ -5,3 +5,6 @@ export * from './detect-forms.js';
 export * from './detect-platform.js';
 export * from './inspect-admin.js';
 export * from './schema-probe.js';
+export * from './aggregate-xform.js';
+export * from './parse-xform.js';
+export * from './form-schema.js';

@@ -86,7 +86,14 @@ O build do Vite gera **`apps/admin/dist`**, não `public`. O `vercel.json` na ra
 2. **Output Directory:** não use `public` — deixe o `vercel.json` definir (`apps/admin/dist` ou `dist`).
 3. **Variável de ambiente:** `VITE_API_URL` = URL pública da API (ex.: `https://sua-api.railway.app`).
 
-A API (`apps/api`) deve ser hospedada separadamente (Railway, Render, Fly.io, etc.).
+A API (`apps/api`) pode ser hospedada em **Cloud Run** (Dockerfile na raiz), Railway, Render, Fly.io, etc.
+
+### Deploy na Google Cloud Run (API)
+
+1. Faça push deste repositório (o build usa o `Dockerfile` na raiz).
+2. No Cloud Run, configure as variáveis de `apps/api/.env.example` (meta DB, `JWT_SECRET`, `CORS_ORIGIN`, etc.).
+3. A plataforma injeta `PORT` automaticamente; em produção o app **não** carrega `.env` local (só variáveis do serviço).
+4. Após o deploy, teste `GET /health` na URL do serviço.
 
 ## Estrutura
 

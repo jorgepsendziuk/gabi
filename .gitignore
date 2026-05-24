@@ -7,3 +7,4 @@ apps/api/.env.local
 *.log
 .DS_Store
 coverage
+out

@@ -16,8 +16,10 @@ import { odkRouter } from './routes/odk.js';
 import { modulesRouter } from './routes/modules.js';
 import { errorHandler } from './middleware/error.js';
 
-config({ override: true });
-config({ path: '.env.local', override: true });
+if (process.env.NODE_ENV !== 'production') {
+  config({ override: true });
+  config({ path: '.env.local', override: true });
+}
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
 const app = express();
@@ -50,6 +52,6 @@ app.use('/api/modules', modulesRouter);
 
 app.use(errorHandler);
 
-app.listen(port, () => {
-  logger.info(`GABI API listening on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  logger.info({ port }, 'GABI API listening');
 });

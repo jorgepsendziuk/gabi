@@ -1,0 +1,271 @@
+import { XMLParser } from 'fast-xml-parser';
+
+export interface OdkChoice {
+  value: string;
+  label: string;
+}
+
+export interface OdkFormField {
+  /** Caminho no instance, ex: /data/grupo/campo */
+  path: string;
+  name: string;
+  type: string;
+  label?: string;
+  hint?: string;
+  required?: boolean;
+  choices?: OdkChoice[];
+  /** Coluna física no Postgres (quando cruzado com _form_data_model) */
+  dbSchema?: string;
+  dbTable?: string;
+  dbColumn?: string;
+}
+
+export interface ParsedXForm {
+  formId?: string;
+  fields: OdkFormField[];
+  fieldCount: number;
+}
+
+const parser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '',
+  removeNSPrefix: true,
+  trimValues: true,
+  isArray: (name) =>
+    [
+      'input',
+      'select1',
+      'select',
+      'upload',
+      'trigger',
+      'setvalue',
+      'group',
+      'repeat',
+      'label',
+      'hint',
+      'item',
+      'text',
+      'body',
+      'span',
+      'translation',
+      'bind',
+    ].includes(name),
+});
+
+type XmlNode = Record<string, unknown>;
+
+function asArray<T>(v: T | T[] | undefined): T[] {
+  if (v == null) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
+function textContent(node: unknown): string {
+  if (node == null) return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (typeof node !== 'object') return '';
+  const o = node as XmlNode;
+  if (typeof o['#text'] === 'string') return o['#text'];
+  const spans = asArray(o.span);
+  return spans.map((s) => textContent(s)).join('').trim();
+}
+
+function buildItextMap(root: XmlNode): Map<string, string> {
+  const map = new Map<string, string>();
+  const model = (root.model ?? root) as XmlNode;
+  const itext = model.itext as XmlNode | undefined;
+  if (!itext) return map;
+
+  for (const translation of asArray(itext.translation)) {
+    const t = translation as XmlNode;
+    const lang = String(t.lang ?? 'default');
+    if (lang !== 'default' && lang !== 'pt' && !lang.startsWith('pt-')) {
+      // prefer default/pt; still index all
+    }
+    for (const text of asArray(t.text)) {
+      const tx = text as XmlNode;
+      const id = String(tx.id ?? '');
+      if (!id) continue;
+      const body = asArray(tx.body)[0] as XmlNode | undefined;
+      const label = textContent(body);
+      if (label && (!map.has(id) || lang === 'default' || lang.startsWith('pt'))) {
+        map.set(id, label);
+      }
+    }
+  }
+  return map;
+}
+
+function resolveLabel(node: XmlNode, itext: Map<string, string>): string | undefined {
+  for (const lab of asArray(node.label)) {
+    const l = lab as XmlNode;
+    if (l.ref) {
+      const id = String(l.ref).replace(/^\/+/, '').split('/').pop() ?? '';
+      const fromItext = itext.get(id);
+      if (fromItext) return fromItext;
+    }
+    const inline = textContent(l);
+    if (inline) return inline;
+  }
+  return undefined;
+}
+
+function resolveHint(node: XmlNode, itext: Map<string, string>): string | undefined {
+  for (const h of asArray(node.hint)) {
+    const hint = h as XmlNode;
+    if (hint.ref) {
+      const id = String(hint.ref).replace(/^\/+/, '').split('/').pop() ?? '';
+      return itext.get(id);
+    }
+    const inline = textContent(hint);
+    if (inline) return inline;
+  }
+  return undefined;
+}
+
+function normalizePath(ref: string, instanceRoot = '/data'): string {
+  let p = ref.trim();
+  if (!p.startsWith('/')) p = `${instanceRoot}/${p}`;
+  if (!p.startsWith(instanceRoot)) p = `${instanceRoot}/${p.replace(/^\/+/, '')}`;
+  return p.replace(/\/+/g, '/');
+}
+
+function pathName(path: string): string {
+  const parts = path.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+function buildBindMap(root: XmlNode): Map<string, { type: string; required?: boolean }> {
+  const map = new Map<string, { type: string; required?: boolean }>();
+  const model = (root.model ?? root) as XmlNode;
+  for (const bind of asArray(model.bind)) {
+    const b = bind as XmlNode;
+    const nodeset = String(b.nodeset ?? '');
+    if (!nodeset) continue;
+    const type = String(b.type ?? 'string');
+    const required = b.required === 'true()' || b.required === true;
+    map.set(normalizePath(nodeset), { type, required });
+  }
+  return map;
+}
+
+function extractChoices(
+  node: XmlNode,
+  model: XmlNode,
+  itext: Map<string, string>,
+): OdkChoice[] | undefined {
+  const itemsetRef = node.itemset ? String((node.itemset as XmlNode).nodeset ?? '') : '';
+  const inlineItems = asArray(node.item);
+
+  if (inlineItems.length > 0) {
+    return inlineItems.map((item) => {
+      const it = item as XmlNode;
+      const value = textContent(it.value) || String(it.value ?? '');
+      const label =
+        resolveLabel(it, itext) ?? textContent(asArray(it.label)[0]) ?? value;
+      return { value, label };
+    });
+  }
+
+  if (!itemsetRef) return undefined;
+
+  const path = itemsetRef.replace(/^instance\(/, '').replace(/\)$/, '').replace(/^'/, '').replace(/'$/, '');
+  const parts = path.split('/').filter(Boolean);
+  let cursor: XmlNode = model;
+  const instance = (model.instance ?? {}) as XmlNode;
+  if (parts[0] === 'instance' && parts.length > 1) {
+    cursor = instance;
+    parts.shift();
+  }
+  for (const part of parts) {
+    cursor = (cursor[part] as XmlNode) ?? {};
+  }
+
+  const items = asArray(cursor.item);
+  return items.map((item) => {
+    const it = item as XmlNode;
+    const value = textContent(it.value) || String(it.value ?? '');
+    const label = resolveLabel(it, itext) ?? value;
+    return { value, label };
+  });
+}
+
+const FIELD_TAGS = new Set(['input', 'select1', 'select', 'upload', 'trigger']);
+
+function walkBody(
+  nodes: XmlNode[],
+  parentPath: string,
+  binds: Map<string, { type: string; required?: boolean }>,
+  itext: Map<string, string>,
+  model: XmlNode,
+  fields: OdkFormField[],
+): void {
+  for (const raw of nodes) {
+    for (const [tag, value] of Object.entries(raw)) {
+      if (tag === '#text') continue;
+      const items = asArray(value as XmlNode);
+      for (const node of items) {
+        const n = node as XmlNode;
+        if (tag === 'group' || tag === 'repeat') {
+          const ref = String(n.ref ?? '');
+          const groupPath = ref ? normalizePath(ref, parentPath) : parentPath;
+          const children: XmlNode[] = [];
+          for (const childTag of Object.keys(n)) {
+            if (childTag === 'ref' || childTag === 'appearance' || childTag === 'label') continue;
+            children.push({ [childTag]: n[childTag] } as XmlNode);
+          }
+          walkBody(children, groupPath, binds, itext, model, fields);
+          continue;
+        }
+
+        if (!FIELD_TAGS.has(tag)) continue;
+
+        const ref = String(n.ref ?? '');
+        if (!ref) continue;
+        const path = normalizePath(ref, parentPath);
+        const name = pathName(path);
+        const bind = binds.get(path);
+        const odkType = tag === 'select1' ? 'select1' : tag === 'select' ? 'select' : bind?.type ?? tag;
+        const choices =
+          tag === 'select1' || tag === 'select' ? extractChoices(n, model, itext) : undefined;
+
+        fields.push({
+          path,
+          name,
+          type: odkType,
+          label: resolveLabel(n, itext),
+          hint: resolveHint(n, itext),
+          required: bind?.required,
+          choices,
+        });
+      }
+    }
+  }
+}
+
+export function parseXFormXml(xml: string): ParsedXForm {
+  const doc = parser.parse(xml) as XmlNode;
+  const root = (doc.html ?? doc) as XmlNode;
+  const head = (root.head ?? {}) as XmlNode;
+  const model = (head.model ?? {}) as XmlNode;
+  const body = (root.body ?? {}) as XmlNode;
+
+  const itext = buildItextMap(model);
+  const binds = buildBindMap(model);
+
+  const instance = asArray(model.instance)[0] as XmlNode | undefined;
+  let formId: string | undefined;
+  if (instance) {
+    const data = (instance.data ?? instance) as XmlNode;
+    formId = data.id ? String(data.id) : undefined;
+  }
+
+  const fields: OdkFormField[] = [];
+  const bodyNodes: XmlNode[] = [];
+  for (const key of Object.keys(body)) {
+    if (key === '#text') continue;
+    bodyNodes.push({ [key]: body[key] } as XmlNode);
+  }
+  walkBody(bodyNodes, '/data', binds, itext, model, fields);
+
+  return { formId, fields, fieldCount: fields.length };
+}

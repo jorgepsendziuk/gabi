@@ -19,7 +19,8 @@
   "dependencies": {
     "@gabi/core": "workspace:*",
     "@gabi/db": "workspace:*",
-    "@gabi/introspector": "workspace:*"
+    "@gabi/introspector": "workspace:*",
+    "fast-xml-parser": "^5.8.0"
   },
   "devDependencies": {
     "@types/pg": "^8.11.10",

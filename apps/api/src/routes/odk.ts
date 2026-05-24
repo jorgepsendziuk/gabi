@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { inspectOdkAdmin } from '@gabi/odk';
+import { getOdkFormSchema, inspectOdkAdmin, listOdkFormIds } from '@gabi/odk';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import {
   getConnectionById,
@@ -35,6 +35,40 @@ odkRouter.get('/overview', requirePermission('system', 'read'), async (req, res,
       },
       ...overview,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+odkRouter.get('/forms', requirePermission('system', 'read'), async (req, res, next) => {
+  try {
+    const connectionId =
+      typeof req.query.connectionId === 'string'
+        ? req.query.connectionId
+        : await getDefaultConnectionId();
+    const pool = await getConnectionPool(connectionId);
+    const forms = await listOdkFormIds(pool);
+    res.json({ connectionId, forms });
+  } catch (err) {
+    next(err);
+  }
+});
+
+odkRouter.get('/forms/:formId/schema', requirePermission('system', 'read'), async (req, res, next) => {
+  try {
+    const connectionId =
+      typeof req.query.connectionId === 'string'
+        ? req.query.connectionId
+        : await getDefaultConnectionId();
+    const rawFormId = req.params.formId;
+    const formId = Array.isArray(rawFormId) ? rawFormId[0] : rawFormId;
+    if (!formId) {
+      res.status(400).json({ error: 'formId é obrigatório' });
+      return;
+    }
+    const pool = await getConnectionPool(connectionId);
+    const schema = await getOdkFormSchema(pool, formId);
+    res.json({ connectionId, ...schema });
   } catch (err) {
     next(err);
   }
