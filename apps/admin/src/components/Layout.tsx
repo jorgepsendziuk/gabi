@@ -1,20 +1,13 @@
 import { useGetIdentity, useLogout } from '@refinedev/core';
-import { Link, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Button, tokens } from '@gabi/ui';
-
-const nav = [
-  { to: '/app', label: 'Início' },
-  { to: '/connections', label: 'Conexões' },
-  { to: '/introspect', label: 'Banco de dados' },
-  { to: '/pages', label: 'Páginas' },
-  { to: '/audit', label: 'Auditoria' },
-];
+import { NavMenu } from './NavMenu';
+import { useModules } from '../contexts/ModuleContext';
 
 export function Layout({ children }: { children: ReactNode }) {
   const { data: identity } = useGetIdentity<{ name: string; email: string }>();
   const { mutate: logout } = useLogout();
-  const location = useLocation();
+  const { modules, activeModuleId, setActiveModuleId, activeModule } = useModules();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -30,6 +23,25 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="flex items-center gap-4 text-sm">
+          <label className="flex items-center gap-2">
+            <span className="opacity-80 hidden sm:inline">Módulo:</span>
+            <select
+              className="text-slate-900 rounded px-2 py-1 text-sm min-w-[140px]"
+              value={activeModuleId ?? ''}
+              onChange={(e) => setActiveModuleId(e.target.value || null)}
+            >
+              <option value="">Todos os módulos</option>
+              {modules.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.icon ? `${m.icon} ` : ''}
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {activeModule && (
+            <span className="text-xs opacity-75 hidden md:inline">Menu: {activeModule.name}</span>
+          )}
           <span>{identity?.name}</span>
           <Button type="button" variant="accent" size="sm" onClick={() => logout()}>
             Sair
@@ -38,28 +50,8 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       <div className="flex flex-1">
-        <nav className="w-56 bg-white border-r border-slate-200 p-4">
-          <ul className="space-y-1">
-            {nav.map((item) => (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
-                  className={`block px-3 py-2 rounded text-sm ${
-                    location.pathname === item.to
-                      ? 'text-white font-medium'
-                      : 'text-slate-700 hover:bg-slate-100'
-                  }`}
-                  style={
-                    location.pathname === item.to
-                      ? { background: tokens.color.accent }
-                      : undefined
-                  }
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+        <nav className="w-64 bg-white border-r border-slate-200 p-4 overflow-y-auto max-h-[calc(100vh-5rem)]">
+          <NavMenu />
         </nav>
         <main className="flex-1 p-6 overflow-auto">{children}</main>
       </div>

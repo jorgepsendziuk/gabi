@@ -1,5 +1,9 @@
 export { DataGridPro } from './DataGridPro.js';
-export type { DataGridColumn, DataGridProProps } from './DataGridPro.js';
+export type {
+  DataGridColumn,
+  DataGridFilterField,
+  DataGridProProps,
+} from './DataGridPro.js';
 export { GeoMap } from './GeoMap.js';
 export type { GeoMapProps } from './GeoMap.js';
 export {

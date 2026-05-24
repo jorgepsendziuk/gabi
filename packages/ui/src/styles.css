@@ -165,6 +165,25 @@
   border-color: var(--gabi-danger);
 }
 
+.gabi-select {
+  display: block;
+  width: 100%;
+  font-family: var(--gabi-font);
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--gabi-border-strong);
+  border-radius: var(--gabi-radius-lg);
+  background: var(--gabi-surface);
+  color: var(--gabi-text);
+  box-sizing: border-box;
+}
+
+.gabi-select:focus {
+  outline: 2px solid var(--gabi-accent);
+  outline-offset: 1px;
+  border-color: var(--gabi-accent);
+}
+
 .gabi-label {
   display: block;
   font-size: 0.875rem;

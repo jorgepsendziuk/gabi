@@ -1,8 +1,10 @@
 import type { DataSource, ListQuery, ListResult } from '@gabi/core';
+import { geometryFromRow } from '@gabi/introspector';
 import { NotFoundError } from '@gabi/core';
 import { query } from '@gabi/db';
 import type pg from 'pg';
 import { z } from 'zod';
+import { rowsToCsv } from './csv.js';
 
 const IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -40,7 +42,9 @@ export class DynamicRepository {
   async list(dataSourceId: string, params: ListQuery): Promise<ListResult> {
     const ds = this.getDataSource(dataSourceId);
     const page = Math.max(1, params.page ?? 1);
-    const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 25));
+    const rawSize = Math.max(1, params.pageSize ?? 25);
+    // Listagens via API ficam em até 100; geojson/export chamam list() com pageSize maior.
+    const pageSize = rawSize <= 100 ? rawSize : Math.min(rawSize, 5000);
     const offset = (page - 1) * pageSize;
 
     const selectCols = this.buildSelectColumns(ds);
@@ -146,27 +150,23 @@ export class DynamicRepository {
     features: Array<{ type: 'Feature'; geometry: unknown; properties: Record<string, unknown> }>;
   }> {
     const ds = this.getDataSource(dataSourceId);
-    const result = await this.list(dataSourceId, { ...params, pageSize: Math.min(params.pageSize ?? 500, 500) });
+    const cap = Math.min(params.pageSize ?? 500, 5000);
+    const result = await this.list(dataSourceId, { ...params, page: 1, pageSize: cap });
 
     const features = result.data
       .map((row) => {
-        let geometry: unknown = null;
-        if (ds.geometryColumn && row[ds.geometryColumn]) {
-          geometry =
-            typeof row[ds.geometryColumn] === 'string'
-              ? JSON.parse(row[ds.geometryColumn] as string)
-              : row[ds.geometryColumn];
-        } else if (ds.latitudeColumn && ds.longitudeColumn) {
-          const lat = Number(row[ds.latitudeColumn]);
-          const lon = Number(row[ds.longitudeColumn]);
-          if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
-            geometry = { type: 'Point', coordinates: [lon, lat] };
-          }
-        }
+        const geometry = geometryFromRow(row, {
+          geometryColumn: ds.geometryColumn,
+          latitudeColumn: ds.latitudeColumn,
+          longitudeColumn: ds.longitudeColumn,
+          geoSource: ds.geoSource,
+        });
         if (!geometry) return null;
 
         const properties = { ...row };
         if (ds.geometryColumn) delete properties[ds.geometryColumn];
+        if (ds.latitudeColumn) delete properties[ds.latitudeColumn];
+        if (ds.longitudeColumn) delete properties[ds.longitudeColumn];
 
         return { type: 'Feature' as const, geometry, properties };
       })
@@ -182,12 +182,11 @@ export class DynamicRepository {
   async exportCsv(dataSourceId: string, params: ListQuery): Promise<string> {
     const result = await this.list(dataSourceId, { ...params, page: 1, pageSize: 10000 });
     const ds = this.getDataSource(dataSourceId);
-    const cols = ds.columns.filter((c) => !c.isGeometry).map((c) => c.name);
-    const header = cols.join(',');
-    const lines = result.data.map((row) =>
-      cols.map((c) => JSON.stringify(row[c] ?? '')).join(','),
-    );
-    return [header, ...lines].join('\n');
+    const allowed = new Set(ds.columns.filter((c) => !c.isGeometry).map((c) => c.name));
+    const cols =
+      params.columns?.filter((c) => allowed.has(c)) ??
+      ds.columns.filter((c) => !c.isGeometry).map((c) => c.name);
+    return rowsToCsv(cols, result.data, cols);
   }
 
   private buildSelectColumns(ds: DataSource): string {
@@ -203,13 +202,33 @@ export class DynamicRepository {
   }
 }
 
+function parseFiltersInput(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (raw === undefined || raw === null || raw === '') continue;
+    out[key] = String(raw);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function parseColumnsInput(value: unknown): string[] | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const cols = value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return cols.length > 0 ? cols : undefined;
+}
+
 export const listQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(100).optional(),
   sort: z.string().optional(),
   order: z.enum(['asc', 'desc']).optional(),
   search: z.string().optional(),
-  filters: z.record(z.string()).optional(),
+  filters: z.preprocess(parseFiltersInput, z.record(z.string()).optional()),
+  columns: z.preprocess(parseColumnsInput, z.array(z.string()).optional()),
   bbox: z
     .string()
     .optional()
@@ -219,4 +238,9 @@ export const listQuerySchema = z.object({
       if (parts.length !== 4 || parts.some(Number.isNaN)) return undefined;
       return parts as [number, number, number, number];
     }),
+});
+
+/** Mapas podem carregar mais feições que listagens paginadas. */
+export const geojsonQuerySchema = listQuerySchema.extend({
+  pageSize: z.coerce.number().int().positive().max(5000).optional(),
 });

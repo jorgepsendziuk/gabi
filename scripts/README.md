@@ -8,7 +8,21 @@
 | [`supabase/02_gabi_permissions_seed.sql`](supabase/02_gabi_permissions_seed.sql) | Role `admin` + permissões base |
 | [`supabase/03_env_exemplo.md`](supabase/03_env_exemplo.md) | `.env` da API apontando para Supabase |
 
-**Ordem:** `01` → `02` → `pnpm db:seed` (cria usuário admin com bcrypt).
+**Ordem (CLI com projeto linkado):**
+
+```bash
+pnpm db:supabase:apply
+# ou: supabase db query --linked --yes -f scripts/supabase/01_gabi_schema.sql
+```
+
+O admin (`admin@gabi.local` / `admin123`) já vem do `03_seed_admin.sql`.
+
+**API local:** cole a senha do Postgres e rode:
+
+```bash
+./scripts/supabase/configure-api-env.sh 'SUA_SENHA'
+pnpm --filter @gabi/api dev
+```
 
 ## Postgres ODK (banco externo — somente leitura)
 

@@ -39,7 +39,28 @@ export function getDefaultPool(): pg.Pool {
   return getPool('default', config);
 }
 
+function parseDatabaseUrl(url: string): DbConfig {
+  const parsed = new URL(url);
+  const database = parsed.pathname.replace(/^\//, '') || 'postgres';
+  const ssl =
+    parsed.searchParams.get('sslmode') === 'require' ||
+    parsed.hostname.includes('supabase.com');
+  return {
+    host: parsed.hostname,
+    port: Number(parsed.port || 5432),
+    database,
+    user: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+    ssl,
+  };
+}
+
 export function getConfigFromEnv(): DbConfig {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (databaseUrl) {
+    return parseDatabaseUrl(databaseUrl);
+  }
+
   return {
     host: process.env.DB_HOST ?? 'localhost',
     port: Number(process.env.DB_PORT ?? 5432),
@@ -65,4 +86,10 @@ export async function closePool(key: string): Promise<void> {
     await pool.end();
     pools.delete(key);
   }
+}
+
+/** Fecha pools de conexões externas (prefixo conn:). */
+export async function closeConnectionPools(): Promise<void> {
+  const keys = [...pools.keys()].filter((k) => k.startsWith('conn:'));
+  await Promise.all(keys.map((k) => closePool(k)));
 }

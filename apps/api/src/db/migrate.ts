@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
 import { getDefaultPool } from '@gabi/db';
 
-config();
+config({ override: true });
+config({ path: '.env.local', override: true });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(__dirname, 'migrations');

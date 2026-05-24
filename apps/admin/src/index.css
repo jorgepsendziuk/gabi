@@ -15,3 +15,48 @@ body {
   background: #f1f5f9;
   color: #0f172a;
 }
+
+.gabi-report-editor .ProseMirror {
+  min-height: 260px;
+  outline: none;
+}
+
+.gabi-report-editor .ProseMirror h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+}
+
+.gabi-report-editor .ProseMirror h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+
+.gabi-report-preview .gabi-report-table,
+.gabi-report-editor .gabi-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+}
+
+.gabi-report-preview .gabi-report-table th,
+.gabi-report-preview .gabi-report-table td,
+.gabi-report-editor .gabi-report-table th,
+.gabi-report-editor .gabi-report-table td {
+  border: 1px solid #cbd5e1;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.gabi-report-preview .gabi-report-table th {
+  background: #f1f5f9;
+  font-weight: 600;
+}
+
+.gabi-report-preview .gabi-report-data {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #cbd5e1;
+}

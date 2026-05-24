@@ -31,28 +31,10 @@ ALTER TABLE gabi_data_source DROP CONSTRAINT IF EXISTS gabi_data_source_schema_n
 CREATE UNIQUE INDEX IF NOT EXISTS gabi_data_source_conn_schema_table
   ON gabi_data_source (connection_id, schema_name, table_name);
 
--- Conexão padrão (detalhes preenchidos pelo seed em apps/api/src/db/seed-connections.ts)
-INSERT INTO gabi_connection (
-  id, name, slug, description,
-  host, port, database_name, db_user, password_enc, ssl, is_default
-)
-SELECT
-  'conn_default',
-  'Banco local (padrão)',
-  'default',
-  'Mesmo banco definido em apps/api/.env — metadados GABI + dados demo',
-  'localhost',
-  5432,
-  'gabi',
-  'gabi',
-  'env',
-  FALSE,
-  TRUE
-WHERE NOT EXISTS (SELECT 1 FROM gabi_connection WHERE slug = 'default');
-
--- Atualiza registros existentes para a conexão padrão
-UPDATE gabi_data_source SET connection_id = 'conn_default' WHERE connection_id IS NULL;
-UPDATE gabi_page SET connection_id = 'conn_default' WHERE connection_id IS NULL;
+-- Sem conexão placeholder: gabi_connection = apenas Postgres de dados (ODK, ERP, etc.).
+-- Registros antigos sem connection_id são removidos em 006_remove_placeholder_connection.sql.
+DELETE FROM gabi_page WHERE connection_id IS NULL;
+DELETE FROM gabi_data_source WHERE connection_id IS NULL;
 
 ALTER TABLE gabi_data_source ALTER COLUMN connection_id SET NOT NULL;
 ALTER TABLE gabi_page ALTER COLUMN connection_id SET NOT NULL;

@@ -3,7 +3,8 @@ import { config } from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { getDefaultPool } from '@gabi/db';
 
-config();
+config({ override: true });
+config({ path: '.env.local', override: true });
 
 async function seed() {
   const pool = getDefaultPool();

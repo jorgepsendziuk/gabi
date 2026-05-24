@@ -14,6 +14,60 @@ export interface GeoMapProps {
   className?: string;
 }
 
+const SOURCE_ID = 'gabi-geojson';
+const LAYER_ID = 'gabi-geojson-fill';
+
+function runWhenStyleReady(map: maplibregl.Map, fn: () => void): void {
+  if (map.isStyleLoaded()) {
+    fn();
+    return;
+  }
+  map.once('load', fn);
+}
+
+function fitMapToPoints(map: maplibregl.Map, geojson: GeoFeatureCollection): void {
+  const bounds = new maplibregl.LngLatBounds();
+  let hasCoords = false;
+
+  for (const f of geojson.features) {
+    const geom = f.geometry as { type?: string; coordinates?: unknown } | null;
+    if (geom?.type === 'Point' && Array.isArray(geom.coordinates) && geom.coordinates.length >= 2) {
+      const [lng, lat] = geom.coordinates as [number, number];
+      if (Number.isFinite(lng) && Number.isFinite(lat)) {
+        bounds.extend([lng, lat]);
+        hasCoords = true;
+      }
+    }
+  }
+
+  if (hasCoords) map.fitBounds(bounds, { padding: 40, maxZoom: 14 });
+}
+
+function applyGeojsonToMap(map: maplibregl.Map, geojson: GeoFeatureCollection): void {
+  const geoData = geojson as maplibregl.GeoJSONSourceSpecification['data'];
+  const existing = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+
+  if (existing) {
+    existing.setData(geoData);
+  } else {
+    map.addSource(SOURCE_ID, { type: 'geojson', data: geoData });
+    if (!map.getLayer(LAYER_ID)) {
+      map.addLayer({
+        id: LAYER_ID,
+        type: 'circle',
+        source: SOURCE_ID,
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#66B000',
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#002157',
+        },
+      });
+    }
+    fitMapToPoints(map, geojson);
+  }
+}
+
 export function GeoMap({
   geojson,
   center = [-47.9, -15.8],
@@ -23,6 +77,8 @@ export function GeoMap({
 }: GeoMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const geojsonRef = useRef(geojson);
+  geojsonRef.current = geojson;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -56,6 +112,11 @@ export function GeoMap({
       map.on('moveend', handler);
     }
 
+    map.once('load', () => {
+      const data = geojsonRef.current;
+      if (data) applyGeojsonToMap(map, data);
+    });
+
     return () => {
       map.remove();
       mapRef.current = null;
@@ -66,38 +127,18 @@ export function GeoMap({
     const map = mapRef.current;
     if (!map || !geojson) return;
 
-    const sourceId = 'gabi-geojson';
-    const layerId = 'gabi-geojson-fill';
+    let cancelled = false;
+    const apply = () => {
+      if (cancelled) return;
+      applyGeojsonToMap(map, geojson);
+    };
 
-    const geoData = geojson as maplibregl.GeoJSONSourceSpecification['data'];
-    if (map.getSource(sourceId)) {
-      (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData(geoData);
-    } else {
-      map.addSource(sourceId, { type: 'geojson', data: geoData });
-      map.addLayer({
-        id: layerId,
-        type: 'circle',
-        source: sourceId,
-        paint: {
-          'circle-radius': 6,
-          'circle-color': '#66B000',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#002157',
-        },
-      });
+    runWhenStyleReady(map, apply);
 
-      const bounds = new maplibregl.LngLatBounds();
-      let hasCoords = false;
-      for (const f of geojson.features) {
-        const geom = f.geometry as { type?: string; coordinates?: [number, number] } | null;
-        if (geom?.type === 'Point' && geom.coordinates) {
-          const [lng, lat] = geom.coordinates;
-          bounds.extend([lng, lat]);
-          hasCoords = true;
-        }
-      }
-      if (hasCoords) map.fitBounds(bounds, { padding: 40, maxZoom: 14 });
-    }
+    return () => {
+      cancelled = true;
+      map.off('load', apply);
+    };
   }, [geojson]);
 
   return <div ref={containerRef} className={className} />;

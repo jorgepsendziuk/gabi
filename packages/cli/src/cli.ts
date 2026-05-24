@@ -54,13 +54,17 @@ program
   .description('Gera metadados de página (chama API se GABI_API_URL definido)')
   .requiredOption('--schema <schema>')
   .requiredOption('--table <table>')
-  .option('--connection <id>', 'ID da conexão GABI', 'conn_default')
-  .option('--template <type>', 'list | map', 'list')
+  .option('--connection <id>', 'ID da conexão GABI (obrigatório)')
+  .option('--template <type>', 'list | map | report', 'list')
   .action(async (opts) => {
     const apiUrl = process.env.GABI_API_URL ?? 'http://localhost:4000';
     const token = process.env.GABI_ADMIN_TOKEN;
 
     if (token) {
+      if (!opts.connection) {
+        console.error('Informe --connection <id> (veja Conexões no admin)');
+        process.exit(1);
+      }
       const res = await fetch(`${apiUrl}/api/generator/pages`, {
         method: 'POST',
         headers: {

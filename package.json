@@ -12,6 +12,7 @@
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @gabi/api db:migrate",
     "db:seed": "pnpm --filter @gabi/api db:seed",
+    "db:supabase:apply": "bash scripts/supabase/apply-linked.sh",
     "gabi": "node packages/cli/dist/cli.js"
   },
   "devDependencies": {

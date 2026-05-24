@@ -13,12 +13,17 @@
   },
   "scripts": {
     "build": "tsc",
+    "dev": "tsc --watch",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gabi/core": "workspace:*"
+    "@gabi/core": "workspace:*",
+    "@gabi/db": "workspace:*",
+    "@gabi/introspector": "workspace:*"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.10",
+    "pg": "^8.13.1",
     "typescript": "^5.7.2"
   }
 }

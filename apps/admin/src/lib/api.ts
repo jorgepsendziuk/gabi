@@ -22,7 +22,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? 'Erro na requisição');
+    const message = (err as { error?: string }).error ?? res.statusText ?? 'Erro na requisição';
+    throw new Error(message);
+  }
+
+  if (res.status === 204) {
+    return undefined as T;
   }
 
   return res.json() as Promise<T>;

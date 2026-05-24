@@ -117,18 +117,38 @@ CREATE TABLE IF NOT EXISTS gabi_data_source (
   UNIQUE (connection_id, schema_name, table_name)
 );
 
+CREATE TABLE IF NOT EXISTS gabi_module (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT,
+  icon TEXT,
+  sort_order INT NOT NULL DEFAULT 0,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS gabi_page (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
   connection_id TEXT NOT NULL REFERENCES gabi_connection(id) ON DELETE CASCADE,
   data_source_id TEXT NOT NULL REFERENCES gabi_data_source(id) ON DELETE CASCADE,
+  module_id TEXT REFERENCES gabi_module(id) ON DELETE SET NULL,
   resource TEXT NOT NULL UNIQUE,
   label TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT 'global' CHECK (scope IN ('private', 'global')),
+  owner_user_id TEXT REFERENCES gabi_user(id) ON DELETE SET NULL,
   config JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+INSERT INTO gabi_module (id, name, slug, description, sort_order)
+VALUES ('mod_default', 'Geral', 'geral', 'Páginas gerais do sistema', 0)
+ON CONFLICT (id) DO NOTHING;
+
 CREATE INDEX IF NOT EXISTS idx_gabi_page_resource ON gabi_page(resource);
+CREATE INDEX IF NOT EXISTS idx_gabi_page_module ON gabi_page(module_id);
 CREATE INDEX IF NOT EXISTS idx_gabi_data_source_connection ON gabi_data_source(connection_id);
 
 COMMENT ON COLUMN gabi_data_source.odk_read_only IS

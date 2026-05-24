@@ -3,6 +3,7 @@ dist
 .turbo
 .env
 .env.local
+apps/api/.env.local
 *.log
 .DS_Store
 coverage

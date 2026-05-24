@@ -1,11 +1,13 @@
 import type { DataSource, ListQuery, ListResult } from '@gabi/core';
 import { NotFoundError } from '@gabi/core';
+import { geometryFromRow } from '@gabi/introspector';
 import { DynamicRepository } from '@gabi/runtime';
 import {
   attachGabiMeta,
   mergeListWithChanges,
   applyChangesToRow,
   resolveRecordKeyColumn,
+  detectRecordKeyColumnFromRow,
 } from '@gabi/odk';
 import { randomUUID } from 'node:crypto';
 import {
@@ -14,6 +16,7 @@ import {
   resolveRecordKeyFromId,
 } from './odk-changes.js';
 import { buildRecordKeyJson, recordKeyToString } from '@gabi/odk';
+import { getDefaultPool, query } from '@gabi/db';
 
 export class OdkOverlayService {
   constructor(
@@ -21,13 +24,27 @@ export class OdkOverlayService {
   ) {}
 
   private getKeyColumn(ds: DataSource): string {
-    return ds.recordKeyColumn ?? ds.primaryKey[0] ?? '_uuid';
+    return ds.recordKeyColumn ?? ds.primaryKey[0] ?? '_uri';
   }
 
   async list(ds: DataSource, dataSourceId: string, params: ListQuery): Promise<ListResult> {
     const base = await this.sourceRepo.list(dataSourceId, params);
     const changes = await loadChangesForDataSource(ds);
-    const keyCol = this.getKeyColumn(ds);
+    let keyCol = this.getKeyColumn(ds);
+    if (base.data[0]) {
+      const detected = detectRecordKeyColumnFromRow(base.data[0], keyCol);
+      if (detected) {
+        keyCol = detected;
+        if (detected !== ds.recordKeyColumn) {
+          await query(
+            getDefaultPool(),
+            `UPDATE gabi_data_source SET record_key_column = $1 WHERE id = $2`,
+            [detected, ds.id],
+          );
+          ds.recordKeyColumn = detected;
+        }
+      }
+    }
 
     const merged = mergeListWithChanges(base.data, changes, keyCol);
     const data = merged.map(attachGabiMeta);
@@ -140,7 +157,7 @@ export class OdkOverlayService {
   async listGeoJson(ds: DataSource, dataSourceId: string, params: ListQuery) {
     const list = await this.list(ds, dataSourceId, {
       ...params,
-      pageSize: Math.min(params.pageSize ?? 500, 500),
+      pageSize: Math.min(params.pageSize ?? 500, 5000),
     });
 
     const features = list.data
@@ -148,23 +165,18 @@ export class OdkOverlayService {
         const meta = row._gabi as { isDeletedLocally?: boolean } | undefined;
         if (meta?.isDeletedLocally) return null;
 
-        let geometry: unknown = null;
-        if (ds.geometryColumn && row[ds.geometryColumn]) {
-          geometry =
-            typeof row[ds.geometryColumn] === 'string'
-              ? JSON.parse(row[ds.geometryColumn] as string)
-              : row[ds.geometryColumn];
-        } else if (ds.latitudeColumn && ds.longitudeColumn) {
-          const lat = Number(row[ds.latitudeColumn]);
-          const lon = Number(row[ds.longitudeColumn]);
-          if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
-            geometry = { type: 'Point', coordinates: [lon, lat] };
-          }
-        }
+        const geometry = geometryFromRow(row, {
+          geometryColumn: ds.geometryColumn,
+          latitudeColumn: ds.latitudeColumn,
+          longitudeColumn: ds.longitudeColumn,
+          geoSource: ds.geoSource,
+        });
         if (!geometry) return null;
 
         const properties = { ...row };
         if (ds.geometryColumn) delete properties[ds.geometryColumn];
+        if (ds.latitudeColumn) delete properties[ds.latitudeColumn];
+        if (ds.longitudeColumn) delete properties[ds.longitudeColumn];
 
         return { type: 'Feature' as const, geometry, properties };
       })
@@ -189,6 +201,9 @@ export function inferOdkDataSourceFlags(
     );
     return { odkReadOnly: true, recordKeyColumn };
   } catch {
-    return { odkReadOnly: true, recordKeyColumn: '_uuid' };
+    const fromRow = table.columns.find((c) =>
+      ['_uri', '_uuid', '_id'].includes(c.name.toLowerCase()),
+    );
+    return { odkReadOnly: true, recordKeyColumn: fromRow?.name ?? '_uri' };
   }
 }

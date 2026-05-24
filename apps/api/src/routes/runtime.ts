@@ -1,11 +1,11 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
-import { DynamicRepository, listQuerySchema } from '@gabi/runtime';
+import { DynamicRepository, geojsonQuerySchema, listQuerySchema, rowsToCsv } from '@gabi/runtime';
 import { requireAuth } from '../middleware/auth.js';
-import { loadDataSources } from '../services/store.js';
+import { assertPageAccess, getPagesByDataSourceId, loadDataSources } from '../services/store.js';
 import { getConnectionPool, getConnectionById } from '../services/connections.js';
 import { writeAudit } from '../middleware/audit.js';
-import { NotFoundError, GabiError } from '@gabi/core';
+import { ForbiddenError, NotFoundError, GabiError } from '@gabi/core';
 import { OdkOverlayService, isOdkOverlayDataSource } from '../services/odk-overlay.js';
 import { getDefaultPool } from '@gabi/db';
 
@@ -29,6 +29,27 @@ async function getReaders(dataSourceId: string) {
   return { ds, repo, overlay };
 }
 
+async function assertRuntimeDataSourceAccess(
+  userId: string | undefined,
+  ability: Request['ability'],
+  dataSourceId: string,
+): Promise<void> {
+  const pages = await getPagesByDataSourceId(dataSourceId);
+  if (pages.length > 0) {
+    await assertPageAccess(userId, ability, { dataSourceId });
+    return;
+  }
+  const resource = dataSourceId.replace(/[^a-zA-Z0-9._:-]/g, '_');
+  if (
+    ability?.can('manage', 'all') ||
+    ability?.can('read', resource) ||
+    ability?.can('read', dataSourceId)
+  ) {
+    return;
+  }
+  throw new ForbiddenError('Acesso negado');
+}
+
 function assertWriteAllowed(ds: Awaited<ReturnType<typeof resolveDataSource>>) {
   if (ds.odkReadOnly) return;
   throw new GabiError(
@@ -40,16 +61,7 @@ function assertWriteAllowed(ds: Awaited<ReturnType<typeof resolveDataSource>>) {
 
 runtimeRouter.get('/:dataSourceId/records', async (req, res, next) => {
   try {
-    const resource = req.params.dataSourceId.replace(/[^a-zA-Z0-9._:-]/g, '_');
-    const ability = req.ability;
-    if (
-      !ability?.can('manage', 'all') &&
-      !ability?.can('read', resource) &&
-      !ability?.can('read', req.params.dataSourceId)
-    ) {
-      res.status(403).json({ error: 'Acesso negado' });
-      return;
-    }
+    await assertRuntimeDataSourceAccess(req.user?.id, req.ability, req.params.dataSourceId);
     const params = listQuerySchema.parse(req.query);
     const { ds, repo, overlay } = await getReaders(req.params.dataSourceId);
     const result = overlay
@@ -63,6 +75,7 @@ runtimeRouter.get('/:dataSourceId/records', async (req, res, next) => {
 
 runtimeRouter.get('/:dataSourceId/records/:recordId', async (req, res, next) => {
   try {
+    await assertRuntimeDataSourceAccess(req.user?.id, req.ability, req.params.dataSourceId);
     const { ds, repo, overlay } = await getReaders(req.params.dataSourceId);
     const recordId = decodeURIComponent(req.params.recordId);
     const row = overlay
@@ -78,6 +91,7 @@ const mutateBodySchema = z.record(z.unknown());
 
 runtimeRouter.post('/:dataSourceId/records', async (req, res, next) => {
   try {
+    await assertRuntimeDataSourceAccess(req.user?.id, req.ability, req.params.dataSourceId);
     const { ds, overlay } = await getReaders(req.params.dataSourceId);
     if (!overlay) {
       assertWriteAllowed(ds);
@@ -100,6 +114,7 @@ runtimeRouter.post('/:dataSourceId/records', async (req, res, next) => {
 
 runtimeRouter.patch('/:dataSourceId/records/:recordId', async (req, res, next) => {
   try {
+    await assertRuntimeDataSourceAccess(req.user?.id, req.ability, req.params.dataSourceId);
     const { ds, overlay } = await getReaders(req.params.dataSourceId);
     if (!overlay) {
       assertWriteAllowed(ds);
@@ -129,6 +144,7 @@ runtimeRouter.patch('/:dataSourceId/records/:recordId', async (req, res, next) =
 
 runtimeRouter.delete('/:dataSourceId/records/:recordId', async (req, res, next) => {
   try {
+    await assertRuntimeDataSourceAccess(req.user?.id, req.ability, req.params.dataSourceId);
     const { ds, overlay } = await getReaders(req.params.dataSourceId);
     if (!overlay) {
       assertWriteAllowed(ds);
@@ -150,7 +166,8 @@ runtimeRouter.delete('/:dataSourceId/records/:recordId', async (req, res, next) 
 
 runtimeRouter.get('/:dataSourceId/geojson', async (req, res, next) => {
   try {
-    const params = listQuerySchema.parse(req.query);
+    await assertRuntimeDataSourceAccess(req.user?.id, req.ability, req.params.dataSourceId);
+    const params = geojsonQuerySchema.parse(req.query);
     const { ds, repo, overlay } = await getReaders(req.params.dataSourceId);
     const geojson = overlay
       ? await overlay.listGeoJson(ds, req.params.dataSourceId, params)
@@ -163,15 +180,8 @@ runtimeRouter.get('/:dataSourceId/geojson', async (req, res, next) => {
 
 runtimeRouter.get('/:dataSourceId/export.csv', async (req, res, next) => {
   try {
+    await assertRuntimeDataSourceAccess(req.user?.id, req.ability, req.params.dataSourceId);
     const resource = req.params.dataSourceId.replace(/[^a-zA-Z0-9._:-]/g, '_');
-    if (
-      !req.ability?.can('manage', 'all') &&
-      !req.ability?.can('export', resource) &&
-      !req.ability?.can('read', resource)
-    ) {
-      res.status(403).json({ error: 'Acesso negado' });
-      return;
-    }
     const params = listQuerySchema.parse(req.query);
     const { ds, repo, overlay } = await getReaders(req.params.dataSourceId);
     const csv = overlay
@@ -213,11 +223,17 @@ async function exportOverlayCsv(
   params: Parameters<OdkOverlayService['list']>[2],
 ): Promise<string> {
   const result = await overlay.list(ds, dataSourceId, { ...params, page: 1, pageSize: 10000 });
-  const cols = ds.columns.filter((c) => !c.isGeometry && c.name !== '_gabi').map((c) => c.name);
-  const header = [...cols, '_gabi_hasLocalChanges'].join(',');
-  const lines = result.data.map((row) => {
+  const allowed = new Set(ds.columns.filter((c) => !c.isGeometry && c.name !== '_gabi').map((c) => c.name));
+  const cols =
+    params.columns?.filter((c) => allowed.has(c)) ??
+    ds.columns.filter((c) => !c.isGeometry && c.name !== '_gabi').map((c) => c.name);
+  const exportFields = [...cols, '_gabi_hasLocalChanges'];
+  const rows = result.data.map((row) => {
     const gabi = row._gabi as { hasLocalChanges?: boolean } | undefined;
-    return [...cols.map((c) => JSON.stringify(row[c] ?? '')), JSON.stringify(gabi?.hasLocalChanges ?? false)].join(',');
+    return {
+      ...row,
+      _gabi_hasLocalChanges: gabi?.hasLocalChanges ?? false,
+    };
   });
-  return [header, ...lines].join('\n');
+  return rowsToCsv(exportFields, rows, exportFields);
 }

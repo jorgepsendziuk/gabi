@@ -12,9 +12,12 @@ import { runtimeRouter } from './routes/runtime.js';
 import { generatorRouter } from './routes/generator.js';
 import { auditRouter } from './routes/audit.js';
 import { connectionsRouter } from './routes/connections.js';
+import { odkRouter } from './routes/odk.js';
+import { modulesRouter } from './routes/modules.js';
 import { errorHandler } from './middleware/error.js';
 
-config();
+config({ override: true });
+config({ path: '.env.local', override: true });
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
 const app = express();
@@ -42,6 +45,8 @@ app.use('/api/runtime', runtimeRouter);
 app.use('/api/generator', generatorRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/connections', connectionsRouter);
+app.use('/api/odk', odkRouter);
+app.use('/api/modules', modulesRouter);
 
 app.use(errorHandler);
 

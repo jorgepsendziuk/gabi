@@ -4,15 +4,27 @@ Use o banco **Supabase** apenas como **meta** (este schema). O ODK fica em outro
 
 ## Connection string (Settings → Database)
 
-**Transaction pooler** (recomendado para API serverless):
+**Session pooler** (recomendado para API Node local):
 
 ```env
-DB_HOST=aws-0-sa-east-1.pooler.supabase.com
-DB_PORT=6543
+DB_HOST=aws-1-us-east-1.pooler.supabase.com
+DB_PORT=5432
 DB_NAME=postgres
-DB_USER=postgres.SEU_PROJECT_REF
+DB_USER=postgres.gjtgxnmodzsnnqosxpgl
 DB_PASSWORD=SUA_SENHA
 DB_SSL=true
+```
+
+Ou cole a URI inteira do dashboard:
+
+```env
+DATABASE_URL=postgresql://postgres.gjtgxnmodzsnnqosxpgl:...@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+**Transaction pooler** (serverless / muitas conexões curtas):
+
+```env
+DB_PORT=6543
 ```
 
 **Session mode / conexão direta** (migrations, introspection pesada):

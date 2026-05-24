@@ -1,4 +1,5 @@
 import type { GabiRecordMeta, OdkChange, OdkChangeOperation } from '@gabi/core';
+import { getRecordKeyValue } from './record-key.js';
 
 export interface MergedRecord {
   data: Record<string, unknown>;
@@ -89,9 +90,9 @@ export function mergeListWithChanges(
   const result: MergedRecord[] = [];
 
   for (const row of rows) {
-    const keyVal = row[recordKeyColumn];
-    if (keyVal === undefined || keyVal === null) continue;
-    const recordKey = `${recordKeyColumn}=${String(keyVal)}`;
+    const keyHit = getRecordKeyValue(row, recordKeyColumn);
+    if (!keyHit) continue;
+    const recordKey = `${keyHit.column}=${String(keyHit.value)}`;
     seen.add(recordKey);
     const merged = applyChangesToRow(row, byKey.get(recordKey) ?? []);
     if (!merged) continue;

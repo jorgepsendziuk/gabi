@@ -22,7 +22,7 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title="Painel GABI"
-        description="Framework mínimo para ERPs geoespaciais. Conecte ao banco, introspecte tabelas e gere listagens e mapas."
+        description="Framework mínimo para ERPs geoespaciais. Conecte ao banco, introspecte tabelas e gere listagens, mapas e relatórios."
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -38,7 +38,7 @@ export function DashboardPage() {
           <Card hover padding="lg">
             <h3 className="font-semibold text-gabi-accent m-0">2. Gerar páginas</h3>
             <p className="text-sm text-gabi-muted mt-1 mb-0">
-              Criar listas e mapas a partir das tabelas
+              Criar listas, mapas e relatórios a partir das tabelas
             </p>
           </Card>
         </Link>
@@ -62,7 +62,15 @@ export function DashboardPage() {
             <li key={p.id} className="bg-white border rounded-lg px-4 py-3 flex justify-between">
               <span>{p.label}</span>
               <Link
-                to={p.type === 'map' ? `/p/${p.resource}/map` : `/p/${p.resource}/list`}
+                to={
+                  p.type === 'map'
+                    ? `/p/${p.resource}/map`
+                    : p.type === 'report'
+                      ? `/p/${p.resource}/report`
+                      : p.type === 'dashboard'
+                        ? `/p/${p.resource}/dashboard`
+                        : `/p/${p.resource}/list`
+                }
                 className="text-sm font-medium text-gabi-accent"
               >
                 Abrir →

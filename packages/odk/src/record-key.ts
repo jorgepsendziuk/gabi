@@ -1,6 +1,7 @@
 import type { TableMeta } from '@gabi/core';
 
-const ODK_KEY_COLUMNS = ['_uuid', '_id', 'uuid', 'id'];
+/** Chaves típicas ODK Central / Aggregate (ordem de prioridade). */
+export const ODK_KEY_COLUMNS = ['_uri', '_uuid', '_id', 'uuid', 'id'];
 
 export function resolveRecordKeyColumn(
   table: TableMeta,
@@ -28,6 +29,33 @@ export function buildRecordKeyJson(
     throw new Error(`Coluna chave "${keyColumn}" ausente no registro`);
   }
   return { [keyColumn]: value };
+}
+
+/** Lê valor da chave no registro (case-insensitive no nome da coluna). */
+export function getRecordKeyValue(
+  row: Record<string, unknown>,
+  preferredColumn: string,
+): { column: string; value: unknown } | null {
+  const candidates = [
+    preferredColumn,
+    ...ODK_KEY_COLUMNS.filter((c) => c.toLowerCase() !== preferredColumn.toLowerCase()),
+  ];
+  for (const candidate of candidates) {
+    const col = Object.keys(row).find((k) => k.toLowerCase() === candidate.toLowerCase());
+    if (col != null && row[col] !== undefined && row[col] !== null && row[col] !== '') {
+      return { column: col, value: row[col] };
+    }
+  }
+  return null;
+}
+
+/** Ajusta coluna chave a partir de uma linha real (útil quando meta está desatualizada). */
+export function detectRecordKeyColumnFromRow(
+  row: Record<string, unknown>,
+  preferred?: string,
+): string | null {
+  const hit = getRecordKeyValue(row, preferred ?? '_uuid');
+  return hit?.column ?? null;
 }
 
 export function recordKeyToString(recordKeyJson: Record<string, unknown>): string {
