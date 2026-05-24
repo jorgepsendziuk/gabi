@@ -100,10 +100,28 @@ Alternativa: só o admin na Vercel com `VITE_API_URL` apontando para API em Clou
 
 ### Deploy na Google Cloud Run (API)
 
-1. Faça push deste repositório (o build usa o `Dockerfile` na raiz).
-2. No Cloud Run, configure as variáveis de `apps/api/.env.example` (meta DB, `JWT_SECRET`, `CORS_ORIGIN`, etc.).
-3. A plataforma injeta `PORT` automaticamente; em produção o app **não** carrega `.env` local (só variáveis do serviço).
-4. Após o deploy, teste `GET /health` na URL do serviço.
+**Importante:** use o **`Dockerfile` na raiz** do repositório. Buildpack “automático” no monorepo costuma subir um container que **não escuta na porta 8080** → erro *failed to start and listen on PORT=8080*.
+
+1. Build + deploy (recomendado):
+
+```bash
+gcloud builds submit --config=cloudbuild.yaml
+```
+
+2. No serviço **gabi** → **Variables & secrets**, copie de `apps/api/.env` (meta Supabase): `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL=true`, `JWT_SECRET`, `CONNECTION_SECRET`, `CORS_ORIGIN`.
+3. Cloud Run injeta `PORT=8080`; o app lê `process.env.PORT` (não use `PORT=4000` nas variáveis do serviço).
+4. Teste: `GET https://SEU-SERVICO.run.app/health` → `{"status":"ok",...}`.
+
+**Console (Deploy from source):** Root Directory = raiz do repo · **Dockerfile** = `Dockerfile` · Container port = **8080** · não marque comando customizado (use o `CMD` da imagem).
+
+**Se falhar de novo:** abra os logs da revisão (link do erro). Causas comuns:
+
+| Log | Causa |
+|-----|--------|
+| `Cannot find package '@gabi/...'` | Imagem sem build do monorepo → use `cloudbuild.yaml` / `Dockerfile` |
+| `Error: listen EACCES` / `EADDRINUSE` | Porta errada no serviço |
+| `password authentication failed` | Só em rotas com DB; `/health` deve funcionar mesmo assim |
+| Processo sai em &lt;1s sem “GABI API listening” | Comando de start errado (ex.: `npm start` na raiz) |
 
 ## Estrutura
 
