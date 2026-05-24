@@ -184,6 +184,7 @@ function CreatePageModal({
     defaultModuleId ?? modules.find((m) => m.id === 'mod_default')?.id ?? modules[0]?.id ?? '',
   );
   const [label, setLabel] = useState('');
+  const [createListAndMap, setCreateListAndMap] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -199,16 +200,34 @@ function CreatePageModal({
       selectedTable?.suggestedPages.includes('map'),
   );
 
+  const existingForTable = useMemo(() => {
+    if (!selectedTable || !connectionId) return { list: false, map: false };
+    const match = (type: PageType) =>
+      existingPages.some(
+        (p) =>
+          p.connectionId === connectionId &&
+          p.schema === selectedTable.schema &&
+          p.table === selectedTable.name &&
+          p.type === type,
+      );
+    return { list: match('list'), map: match('map') };
+  }, [existingPages, selectedTable, connectionId]);
+
   const duplicate = useMemo(() => {
-    if (!selectedTable || !connectionId) return false;
+    if (createListAndMap && canMap) {
+      return existingForTable.list && existingForTable.map;
+    }
+    if (template === 'list') return existingForTable.list;
+    if (template === 'map') return existingForTable.map;
     return existingPages.some(
       (p) =>
         p.connectionId === connectionId &&
+        selectedTable &&
         p.schema === selectedTable.schema &&
         p.table === selectedTable.name &&
         p.type === template,
     );
-  }, [existingPages, selectedTable, connectionId, template]);
+  }, [createListAndMap, canMap, existingForTable, template, existingPages, connectionId, selectedTable]);
 
   useEffect(() => {
     if (!connectionId) {
@@ -225,7 +244,22 @@ function CreatePageModal({
 
   useEffect(() => {
     if (template === 'map' && !canMap) setTemplate('list');
+    if (!canMap) setCreateListAndMap(false);
   }, [canMap, template]);
+
+  const postPage = (templateType: PageType) =>
+    apiFetch('/api/generator/pages', {
+      method: 'POST',
+      body: JSON.stringify({
+        connectionId,
+        schema: selectedTable!.schema,
+        table: selectedTable!.name,
+        template: templateType,
+        label: label.trim() || undefined,
+        scope,
+        moduleId: moduleId || 'mod_default',
+      }),
+    });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,18 +267,23 @@ function CreatePageModal({
     setError('');
     setSubmitting(true);
     try {
-      await apiFetch('/api/generator/pages', {
-        method: 'POST',
-        body: JSON.stringify({
-          connectionId,
-          schema: selectedTable.schema,
-          table: selectedTable.name,
-          template,
-          label: label.trim() || undefined,
-          scope,
-          moduleId: moduleId || 'mod_default',
-        }),
-      });
+      if (createListAndMap && canMap) {
+        const created: string[] = [];
+        if (!existingForTable.list) {
+          await postPage('list');
+          created.push('lista');
+        }
+        if (!existingForTable.map) {
+          await postPage('map');
+          created.push('mapa');
+        }
+        if (created.length === 0) {
+          setError('Lista e mapa já existem para esta tabela.');
+          return;
+        }
+      } else {
+        await postPage(template);
+      }
       onCreated();
       onClose();
     } catch (err) {
@@ -283,17 +322,28 @@ function CreatePageModal({
 
         <form onSubmit={submit} className="space-y-4">
           {error && <Alert variant="danger">{error}</Alert>}
+          {createListAndMap && canMap && (existingForTable.list || existingForTable.map) && !duplicate && (
+            <Alert variant="info">
+              {existingForTable.list && existingForTable.map
+                ? 'Lista e mapa já existem.'
+                : existingForTable.list
+                  ? 'Lista já existe — será criado só o mapa.'
+                  : 'Mapa já existe — será criada só a lista.'}
+            </Alert>
+          )}
           {duplicate && (
             <Alert variant="warning">
-              Já existe uma página{' '}
-              {template === 'map'
-                ? 'de mapa'
-                : template === 'report'
-                  ? 'de relatório'
-                  : template === 'dashboard'
-                    ? 'de dashboard'
-                    : 'de lista'}{' '}
-              para esta tabela.
+              {createListAndMap && canMap
+                ? 'Lista e mapa já existem para esta tabela.'
+                : `Já existe uma página ${
+                    template === 'map'
+                      ? 'de mapa'
+                      : template === 'report'
+                        ? 'de relatório'
+                        : template === 'dashboard'
+                          ? 'de dashboard'
+                          : 'de lista'
+                  } para esta tabela.`}
             </Alert>
           )}
 
@@ -356,8 +406,11 @@ function CreatePageModal({
             <div className="flex flex-wrap gap-2 mt-2">
               <button
                 type="button"
-                className={`gabi-btn gabi-btn--sm ${template === 'list' ? 'gabi-btn--accent' : 'gabi-btn--outline'}`}
-                onClick={() => setTemplate('list')}
+                className={`gabi-btn gabi-btn--sm ${template === 'list' && !createListAndMap ? 'gabi-btn--accent' : 'gabi-btn--outline'}`}
+                onClick={() => {
+                  setCreateListAndMap(false);
+                  setTemplate('list');
+                }}
               >
                 Lista
               </button>
@@ -365,26 +418,49 @@ function CreatePageModal({
                 type="button"
                 disabled={!canMap}
                 title={!canMap ? 'Tabela sem geometria' : undefined}
-                className={`gabi-btn gabi-btn--sm ${template === 'map' ? 'gabi-btn--primary' : 'gabi-btn--outline'}`}
-                onClick={() => setTemplate('map')}
+                className={`gabi-btn gabi-btn--sm ${template === 'map' && !createListAndMap ? 'gabi-btn--primary' : 'gabi-btn--outline'}`}
+                onClick={() => {
+                  setCreateListAndMap(false);
+                  setTemplate('map');
+                }}
               >
                 Mapa
               </button>
               <button
                 type="button"
                 className={`gabi-btn gabi-btn--sm ${template === 'report' ? 'gabi-btn--accent' : 'gabi-btn--outline'}`}
-                onClick={() => setTemplate('report')}
+                onClick={() => {
+                  setCreateListAndMap(false);
+                  setTemplate('report');
+                }}
               >
                 Relatório
               </button>
               <button
                 type="button"
                 className={`gabi-btn gabi-btn--sm ${template === 'dashboard' ? 'gabi-btn--primary' : 'gabi-btn--outline'}`}
-                onClick={() => setTemplate('dashboard')}
+                onClick={() => {
+                  setCreateListAndMap(false);
+                  setTemplate('dashboard');
+                }}
               >
                 Dashboard
               </button>
             </div>
+            {canMap && (
+              <label className="flex items-center gap-2 mt-3 text-sm text-gabi-muted cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={createListAndMap}
+                  onChange={(e) => {
+                    setCreateListAndMap(e.target.checked);
+                    if (e.target.checked) setTemplate('list');
+                  }}
+                  className="rounded border-[var(--gabi-border-strong)]"
+                />
+                Criar lista e mapa juntos
+              </label>
+            )}
           </div>
 
           <Field label="Rótulo (opcional)">
@@ -440,7 +516,11 @@ function CreatePageModal({
               className="flex-1"
               disabled={submitting || !selectedTable || duplicate}
             >
-              {submitting ? 'Criando…' : 'Criar página'}
+              {submitting
+                ? 'Criando…'
+                : createListAndMap && canMap
+                  ? 'Criar lista + mapa'
+                  : 'Criar página'}
             </Button>
           </div>
         </form>

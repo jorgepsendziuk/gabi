@@ -25,6 +25,8 @@ export interface GeneratePageInput {
   ownerUserId?: string;
   odkReadOnly?: boolean;
   recordKeyColumn?: string;
+  /** Labels ODK por nome de coluna (header da grid / filtros). */
+  columnLabels?: Record<string, string>;
 }
 
 export interface GeneratePageResult {
@@ -79,7 +81,9 @@ export function generatePage(input: GeneratePageInput): GeneratePageResult {
   }
 
   const listConfig =
-    input.type === 'list' ? buildDefaultListPageConfig(input.table) : null;
+    input.type === 'list' || input.type === 'report'
+      ? buildDefaultListPageConfig(input.table, input.columnLabels)
+      : null;
 
   const pageLabel =
     input.type === 'map'
@@ -106,12 +110,7 @@ export function generatePage(input: GeneratePageInput): GeneratePageResult {
       input.type === 'dashboard'
         ? (buildDefaultDashboardPageConfig() as unknown as Record<string, unknown>)
         : {
-            ...(listConfig ?? {
-              columns: input.table.columns
-                .filter((c) => !c.isGeometry)
-                .slice(0, 12)
-                .map((c) => ({ field: c.name, header: c.name })),
-            }),
+            ...(listConfig ?? buildFallbackPageConfig(input.table, input.columnLabels)),
             geometryColumn: input.table.geometryColumn,
             ...(input.type === 'report'
               ? {
@@ -139,23 +138,52 @@ export function generatePage(input: GeneratePageInput): GeneratePageResult {
   return { dataSource, page, permissions };
 }
 
+function resolveHeader(columnName: string, labels?: Record<string, string>): string {
+  if (!labels) return columnName;
+  return (
+    labels[columnName] ??
+    labels[columnName.toUpperCase()] ??
+    labels[columnName.toLowerCase()] ??
+    columnName
+  );
+}
+
 /** Colunas e filtros para todos os campos não-geometria da tabela. */
-export function buildDefaultListPageConfig(table: TableMeta): ListPageConfig {
+export function buildDefaultListPageConfig(
+  table: TableMeta,
+  columnLabels?: Record<string, string>,
+): ListPageConfig {
   const fields = table.columns.filter((c) => !c.isGeometry);
   const columns: ListColumnConfig[] = fields.map((c, i) => ({
     field: c.name,
-    header: c.name,
+    header: resolveHeader(c.name, columnLabels),
     visible: i < 12,
   }));
   const filters: ListFilterConfig[] = fields.map((c) => ({
     field: c.name,
-    label: c.name,
+    label: resolveHeader(c.name, columnLabels),
     visible: true,
   }));
   return {
     columns,
     filters,
     geometryColumn: table.geometryColumn,
+  };
+}
+
+function buildFallbackPageConfig(
+  table: TableMeta,
+  columnLabels?: Record<string, string>,
+): Pick<ListPageConfig, 'columns'> {
+  return {
+    columns: table.columns
+      .filter((c) => !c.isGeometry)
+      .slice(0, 12)
+      .map((c) => ({
+        field: c.name,
+        header: resolveHeader(c.name, columnLabels),
+        visible: true,
+      })),
   };
 }
 

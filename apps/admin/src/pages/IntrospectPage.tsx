@@ -98,6 +98,25 @@ export function IntrospectPage() {
     }
   };
 
+  const formatBulkResult = (
+    label: string,
+    res: {
+      created: Array<{ formId: string; label: string }>;
+      skipped: Array<{ formId: string; reason: string }>;
+      formsDetected: number;
+    },
+  ) => {
+    const lines = [
+      `${label}: ${res.created.length} página(s) criada(s) de ${res.formsDetected} formulário(s).`,
+    ];
+    if (res.skipped.length > 0) {
+      lines.push(
+        `Ignorados: ${res.skipped.map((s) => `${s.formId} (${s.reason})`).join(', ')}`,
+      );
+    }
+    return lines.join('\n');
+  };
+
   const generateAllOdkForms = async (template: 'list' | 'map') => {
     setGenerating(`odk-bulk-${template}`);
     try {
@@ -109,15 +128,30 @@ export function IntrospectPage() {
         method: 'POST',
         body: JSON.stringify({ connectionId, template, moduleId }),
       });
-      const msg = [
-        `${res.created.length} página(s) criada(s) de ${res.formsDetected} formulário(s) detectado(s).`,
-        res.skipped.length > 0
-          ? `Ignorados: ${res.skipped.map((s) => `${s.formId} (${s.reason})`).join(', ')}`
-          : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
-      alert(msg);
+      alert(formatBulkResult(template === 'map' ? 'Mapas' : 'Listas', res));
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  const generateAllOdkFormsListAndMap = async () => {
+    setGenerating('odk-bulk-both');
+    try {
+      const listRes = await apiFetch<{
+        created: Array<{ formId: string; label: string }>;
+        skipped: Array<{ formId: string; reason: string }>;
+        formsDetected: number;
+      }>('/api/generator/odk-forms', {
+        method: 'POST',
+        body: JSON.stringify({ connectionId, template: 'list', moduleId }),
+      });
+      const mapRes = await apiFetch<typeof listRes>('/api/generator/odk-forms', {
+        method: 'POST',
+        body: JSON.stringify({ connectionId, template: 'map', moduleId }),
+      });
+      alert([formatBulkResult('Listas', listRes), formatBulkResult('Mapas', mapRes)].join('\n\n'));
     } catch (e) {
       alert(String(e));
     } finally {
@@ -228,7 +262,7 @@ export function IntrospectPage() {
                 <code>_form_info</code>). Passe o mouse no item para ver os sinais.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={generating !== null}
@@ -237,6 +271,24 @@ export function IntrospectPage() {
                 style={{ background: gabiTheme.colors.accent }}
               >
                 {generating === 'odk-bulk-list' ? 'Gerando...' : 'Gerar todas (lista)'}
+              </button>
+              <button
+                type="button"
+                disabled={generating !== null}
+                onClick={() => generateAllOdkForms('map')}
+                className="px-3 py-1.5 text-sm rounded border"
+                style={{ borderColor: gabiTheme.colors.primary, color: gabiTheme.colors.primary }}
+              >
+                {generating === 'odk-bulk-map' ? 'Gerando...' : 'Gerar todas (mapa)'}
+              </button>
+              <button
+                type="button"
+                disabled={generating !== null}
+                onClick={generateAllOdkFormsListAndMap}
+                className="px-3 py-1.5 text-sm rounded text-white"
+                style={{ background: gabiTheme.colors.primary }}
+              >
+                {generating === 'odk-bulk-both' ? 'Gerando...' : 'Lista + mapa'}
               </button>
             </div>
           </div>

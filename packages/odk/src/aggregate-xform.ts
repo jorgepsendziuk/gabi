@@ -103,10 +103,18 @@ export async function listAggregateForms(
 export async function resolveAggregateFormById(
   pool: pg.Pool,
   tables: Awaited<ReturnType<typeof resolveAggregateBlobTables>>,
-  formId: string,
+  formIdOrUri: string,
 ): Promise<AggregateFormRef | null> {
+  const key = formIdOrUri.toLowerCase();
   const forms = await listAggregateForms(pool, tables);
-  return forms.find((f) => f.formId.toLowerCase() === formId.toLowerCase()) ?? null;
+  return (
+    forms.find(
+      (f) =>
+        f.formId.toLowerCase() === key ||
+        f.formUri.toLowerCase() === key ||
+        f.filesetUri.toLowerCase() === key,
+    ) ?? null
+  );
 }
 
 /** Lê o XForm XML completo a partir das tabelas _form_info_xform_* do Aggregate. */

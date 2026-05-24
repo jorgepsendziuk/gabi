@@ -34,6 +34,26 @@ interface OdkFormRow {
   createdAt?: string;
 }
 
+interface OdkSchemaField {
+  path: string;
+  name: string;
+  type: string;
+  label?: string;
+  hint?: string;
+  dbColumn?: string;
+  dbTable?: string;
+  choices?: Array<{ value: string; label: string }>;
+}
+
+interface OdkFormSchema {
+  formId: string;
+  formName?: string;
+  fieldCount: number;
+  dataModelMapped: number;
+  fields: OdkSchemaField[];
+  warnings: string[];
+}
+
 interface OdkOverview {
   connectionId: string;
   connection: {
@@ -92,6 +112,10 @@ export function OdkAdminPage() {
   const [data, setData] = useState<OdkOverview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [schemaFormId, setSchemaFormId] = useState<string | null>(null);
+  const [schema, setSchema] = useState<OdkFormSchema | null>(null);
+  const [schemaLoading, setSchemaLoading] = useState(false);
+  const [schemaError, setSchemaError] = useState('');
 
   useEffect(() => {
     apiFetch<Connection[]>('/api/connections').then((list) => {
@@ -120,7 +144,32 @@ export function OdkAdminPage() {
 
   useEffect(() => {
     if (connectionId) load();
+    setSchemaFormId(null);
+    setSchema(null);
+    setSchemaError('');
   }, [connectionId]);
+
+  const loadSchema = async (formId: string) => {
+    if (!connectionId) return;
+    if (formId.startsWith('md5:')) {
+      setSchemaError('Use o Form ID (ex: laudov1), não o URI interno md5:…');
+      return;
+    }
+    setSchemaFormId(formId);
+    setSchemaLoading(true);
+    setSchema(null);
+    setSchemaError('');
+    try {
+      const r = await apiFetch<OdkFormSchema>(
+        `/api/odk/forms/${encodeURIComponent(formId)}/schema?connectionId=${encodeURIComponent(connectionId)}`,
+      );
+      setSchema(r);
+    } catch (e) {
+      setSchemaError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSchemaLoading(false);
+    }
+  };
 
   const siteUsers = data?.users.filter((u) => u.kind === 'site') ?? [];
   const appUsers = data?.users.filter((u) => u.kind === 'app') ?? [];
@@ -335,21 +384,117 @@ export function OdkAdminPage() {
                     <th className="p-2">Nome</th>
                     <th className="p-2">Versão</th>
                     <th className="p-2">Projeto</th>
+                    <th className="p-2 w-28" />
                   </tr>
                 </thead>
                 <tbody>
-                  {data.forms.map((f, i) => (
-                    <tr key={`${f.xmlFormId ?? f.id ?? i}`} className="border-b border-slate-100">
-                      <td className="p-2 font-mono text-xs">{f.xmlFormId ?? f.id}</td>
-                      <td className="p-2">{f.name ?? '—'}</td>
-                      <td className="p-2">{f.version ?? '—'}</td>
-                      <td className="p-2 text-slate-500">{f.projectName ?? '—'}</td>
-                    </tr>
-                  ))}
+                  {data.forms.map((f, i) => {
+                    const formId = f.xmlFormId ? String(f.xmlFormId) : '';
+                    const displayId = formId || String(f.id ?? '—');
+                    return (
+                      <tr key={`${displayId}-${i}`} className="border-b border-slate-100">
+                        <td className="p-2 font-mono text-xs">{displayId}</td>
+                        <td className="p-2">{f.name ?? '—'}</td>
+                        <td className="p-2">{f.version ?? '—'}</td>
+                        <td className="p-2 text-slate-500">{f.projectName ?? '—'}</td>
+                        <td className="p-2">
+                          <button
+                            type="button"
+                            className="text-xs px-2 py-1 border rounded hover:bg-slate-50"
+                            disabled={!formId || schemaLoading}
+                            title={formId ? 'Labels e escolhas do XML' : 'Sem FORM_ID — não é possível carregar schema'}
+                            onClick={() => loadSchema(formId)}
+                          >
+                            {schemaFormId === formId && schemaLoading ? '...' : 'Schema'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
           </section>
+
+          {schemaFormId && (
+            <section className="bg-white border rounded-lg p-4 mb-6 overflow-x-auto">
+              <div className="flex justify-between items-start gap-2 mb-3">
+                <div>
+                  <h3 className="font-semibold">
+                    Schema: {schema?.formName ?? schemaFormId}
+                  </h3>
+                  {schema && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {schema.fieldCount} campos · {schema.dataModelMapped} mapeados para colunas
+                      do banco
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-slate-500 underline"
+                  onClick={() => {
+                    setSchemaFormId(null);
+                    setSchema(null);
+                  }}
+                >
+                  Fechar
+                </button>
+              </div>
+              {schemaError && (
+                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+                  {schemaError}
+                </div>
+              )}
+              {schemaLoading && (
+                <p className="text-sm text-slate-500">Lendo XML do formulário no banco...</p>
+              )}
+              {schema && schema.warnings.length > 0 && (
+                <ul className="text-xs text-amber-800 mb-2">
+                  {schema.warnings.map((w) => (
+                    <li key={w}>• {w}</li>
+                  ))}
+                </ul>
+              )}
+              {schema && (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b">
+                      <th className="p-2">Label</th>
+                      <th className="p-2">Campo</th>
+                      <th className="p-2">Tipo</th>
+                      <th className="p-2">Coluna BD</th>
+                      <th className="p-2">Escolhas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schema.fields.map((f) => (
+                      <tr key={f.path} className="border-b border-slate-50">
+                        <td className="p-2">{f.label ?? '—'}</td>
+                        <td className="p-2 font-mono">{f.name}</td>
+                        <td className="p-2 text-slate-500">{f.type}</td>
+                        <td className="p-2 font-mono text-slate-600">
+                          {f.dbTable && f.dbColumn
+                            ? `${f.dbTable}.${f.dbColumn}`
+                            : '—'}
+                        </td>
+                        <td className="p-2 text-slate-500 max-w-xs truncate" title={
+                          f.choices?.map((c) => `${c.value}=${c.label}`).join(', ')
+                        }>
+                          {f.choices?.length
+                            ? f.choices
+                                .slice(0, 3)
+                                .map((c) => c.label)
+                                .join(', ') + (f.choices.length > 3 ? '…' : '')
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+          )}
 
           <details className="text-xs text-slate-500">
             <summary className="cursor-pointer mb-2">Detalhes técnicos</summary>

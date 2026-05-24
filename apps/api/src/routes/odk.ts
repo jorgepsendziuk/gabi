@@ -67,9 +67,14 @@ odkRouter.get('/forms/:formId/schema', requirePermission('system', 'read'), asyn
       return;
     }
     const pool = await getConnectionPool(connectionId);
-    const schema = await getOdkFormSchema(pool, formId);
+    const schema = await getOdkFormSchema(pool, decodeURIComponent(formId));
     res.json({ connectionId, ...schema });
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('não encontrado')) {
+      res.status(404).json({ error: message });
+      return;
+    }
     next(err);
   }
 });

@@ -127,7 +127,7 @@ Com `GABI_ADMIN_TOKEN` (JWT do admin) e `GABI_API_URL`, o generate persiste via 
 Para Postgres com formulários ODK:
 
 1. **Conexões** → marque **Fonte ODK (somente leitura + overlay GABI)** ao cadastrar o banco ODK.
-2. **ODK** → painel somente leitura: plataforma (Central/Aggregate), usuários, catálogo de formulários, preferências do servidor (`GET /api/odk/overview`).
+2. **ODK** → painel somente leitura: plataforma (Central/Aggregate), usuários, catálogo de formulários, preferências do servidor (`GET /api/odk/overview`). Por formulário: schema com labels e escolhas extraídos do XForm XML (`GET /api/odk/forms/:formId/schema`).
 3. **Banco de dados** → introspecção detecta formulários ODK (tabela principal + repeats) e permite gerar listas/mapas em lote; overlay automático em fontes ODK.
 3. **Leitura:** sempre do Postgres ODK original.
 4. **Escrita:** `CREATE` / `UPDATE` / `DELETE` vão para `gabi_odk_change` no banco **meta** (nunca alteram o ODK).

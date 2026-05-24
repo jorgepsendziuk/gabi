@@ -97,6 +97,38 @@ export async function listOdkFormIds(pool: pg.Pool): Promise<
 }
 
 /**
+ * Schema ODK pela tabela de submissão (_CORE), cruzando _form_data_model.
+ */
+export async function getOdkFormSchemaForSubmissionTable(
+  pool: pg.Pool,
+  schema: string,
+  tableName: string,
+): Promise<OdkFormSchemaResult | null> {
+  const platform = await detectOdkPlatform(pool);
+  if (platform.platform !== 'aggregate') return null;
+
+  const tables = await resolveAggregateBlobTables(pool);
+  const aggForms = await listAggregateForms(pool, tables);
+  const tableKey = tableName.toUpperCase();
+
+  for (const f of aggForms) {
+    const submissionUri = await resolveSubmissionModelUri(pool, tables, f);
+    if (!submissionUri) continue;
+    const model = await loadFormDataModel(pool, tables, submissionUri);
+    const matches = model.some(
+      (m) =>
+        m.dbTable?.toUpperCase() === tableKey &&
+        (!m.dbSchema || m.dbSchema === schema),
+    );
+    if (matches) {
+      return getAggregateFormSchema(pool, f.formId);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Extrai schema de campos (labels, tipos, escolhas) a partir do XForm no banco.
  */
 export async function getOdkFormSchema(

@@ -54,6 +54,12 @@ const parser = new XMLParser({
 
 type XmlNode = Record<string, unknown>;
 
+/** Resolve tag com ou sem prefixo de namespace (h:html, html). */
+function pickChild(node: XmlNode | undefined, localName: string): unknown {
+  if (!node) return undefined;
+  return node[localName] ?? node[`h:${localName}`];
+}
+
 function asArray<T>(v: T | T[] | undefined): T[] {
   if (v == null) return [];
   return Array.isArray(v) ? v : [v];
@@ -69,10 +75,9 @@ function textContent(node: unknown): string {
   return spans.map((s) => textContent(s)).join('').trim();
 }
 
-function buildItextMap(root: XmlNode): Map<string, string> {
+function buildItextMap(model: XmlNode): Map<string, string> {
   const map = new Map<string, string>();
-  const model = (root.model ?? root) as XmlNode;
-  const itext = model.itext as XmlNode | undefined;
+  const itext = pickChild(model, 'itext') as XmlNode | undefined;
   if (!itext) return map;
 
   for (const translation of asArray(itext.translation)) {
@@ -134,10 +139,9 @@ function pathName(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
-function buildBindMap(root: XmlNode): Map<string, { type: string; required?: boolean }> {
+function buildBindMap(model: XmlNode): Map<string, { type: string; required?: boolean }> {
   const map = new Map<string, { type: string; required?: boolean }>();
-  const model = (root.model ?? root) as XmlNode;
-  for (const bind of asArray(model.bind)) {
+  for (const bind of asArray(pickChild(model, 'bind') as XmlNode | XmlNode[] | undefined)) {
     const b = bind as XmlNode;
     const nodeset = String(b.nodeset ?? '');
     if (!nodeset) continue;
@@ -191,42 +195,64 @@ function extractChoices(
 
 const FIELD_TAGS = new Set(['input', 'select1', 'select', 'upload', 'trigger']);
 
+function localTagName(tag: string): string {
+  return tag.includes(':') ? (tag.split(':').pop() ?? tag) : tag;
+}
+
+/** O parser às vezes coloca o conteúdo do body em chaves numéricas ou um único wrapper. */
+function flattenBodyNodes(body: XmlNode): XmlNode[] {
+  const nodes: XmlNode[] = [];
+  for (const key of Object.keys(body)) {
+    if (key === '#text' || key.startsWith('@_')) continue;
+    const val = body[key];
+    if (/^\d+$/.test(key) && val && typeof val === 'object' && !Array.isArray(val)) {
+      nodes.push(val as XmlNode);
+      continue;
+    }
+    nodes.push({ [key]: val } as XmlNode);
+  }
+  return nodes;
+}
+
 function walkBody(
-  nodes: XmlNode[],
+  nodes: XmlNode[] | XmlNode,
   parentPath: string,
   binds: Map<string, { type: string; required?: boolean }>,
   itext: Map<string, string>,
   model: XmlNode,
   fields: OdkFormField[],
 ): void {
-  for (const raw of nodes) {
+  const list = Array.isArray(nodes) ? nodes : [nodes];
+  for (const raw of list) {
     for (const [tag, value] of Object.entries(raw)) {
-      if (tag === '#text') continue;
+      if (tag === '#text' || tag.startsWith('@_') || /^\d+$/.test(tag)) {
+        if (/^\d+$/.test(tag) && value && typeof value === 'object') {
+          walkBody(value as XmlNode, parentPath, binds, itext, model, fields);
+        }
+        continue;
+      }
+      const local = localTagName(tag);
       const items = asArray(value as XmlNode);
       for (const node of items) {
         const n = node as XmlNode;
-        if (tag === 'group' || tag === 'repeat') {
+        if (local === 'group' || local === 'repeat') {
           const ref = String(n.ref ?? '');
           const groupPath = ref ? normalizePath(ref, parentPath) : parentPath;
-          const children: XmlNode[] = [];
-          for (const childTag of Object.keys(n)) {
-            if (childTag === 'ref' || childTag === 'appearance' || childTag === 'label') continue;
-            children.push({ [childTag]: n[childTag] } as XmlNode);
-          }
-          walkBody(children, groupPath, binds, itext, model, fields);
+          walkBody(n, groupPath, binds, itext, model, fields);
           continue;
         }
 
-        if (!FIELD_TAGS.has(tag)) continue;
+        if (!FIELD_TAGS.has(local)) continue;
 
         const ref = String(n.ref ?? '');
         if (!ref) continue;
         const path = normalizePath(ref, parentPath);
         const name = pathName(path);
         const bind = binds.get(path);
-        const odkType = tag === 'select1' ? 'select1' : tag === 'select' ? 'select' : bind?.type ?? tag;
+        const odkType =
+          local === 'select1' ? 'select1' : local === 'select' ? 'select' : bind?.type ?? local;
         const choices =
-          tag === 'select1' || tag === 'select' ? extractChoices(n, model, itext) : undefined;
+          local === 'select1' || local === 'select' ? extractChoices(n, model, itext) : undefined;
 
         fields.push({
           path,
@@ -242,17 +268,31 @@ function walkBody(
   }
 }
 
+/** Diagnóstico: chaves do documento parseado. */
+export function debugXformParseKeys(xml: string): Record<string, string[]> {
+  const doc = parser.parse(xml) as XmlNode;
+  const root = (pickChild(doc, 'html') ?? doc) as XmlNode;
+  const body = (pickChild(root, 'body') ?? {}) as XmlNode;
+  return {
+    doc: Object.keys(doc),
+    html: Object.keys(root),
+    body: Object.keys(body).slice(0, 30),
+  };
+}
+
 export function parseXFormXml(xml: string): ParsedXForm {
   const doc = parser.parse(xml) as XmlNode;
-  const root = (doc.html ?? doc) as XmlNode;
-  const head = (root.head ?? {}) as XmlNode;
-  const model = (head.model ?? {}) as XmlNode;
-  const body = (root.body ?? {}) as XmlNode;
+  const root = (pickChild(doc, 'html') ?? doc) as XmlNode;
+  const head = (pickChild(root, 'head') ?? {}) as XmlNode;
+  const model = (pickChild(head, 'model') ?? {}) as XmlNode;
+  const body = (pickChild(root, 'body') ?? {}) as XmlNode;
 
   const itext = buildItextMap(model);
   const binds = buildBindMap(model);
 
-  const instance = asArray(model.instance)[0] as XmlNode | undefined;
+  const instance = asArray(pickChild(model, 'instance') as XmlNode | XmlNode[] | undefined)[0] as
+    | XmlNode
+    | undefined;
   let formId: string | undefined;
   if (instance) {
     const data = (instance.data ?? instance) as XmlNode;
@@ -260,12 +300,8 @@ export function parseXFormXml(xml: string): ParsedXForm {
   }
 
   const fields: OdkFormField[] = [];
-  const bodyNodes: XmlNode[] = [];
-  for (const key of Object.keys(body)) {
-    if (key === '#text') continue;
-    bodyNodes.push({ [key]: body[key] } as XmlNode);
-  }
-  walkBody(bodyNodes, '/data', binds, itext, model, fields);
+  const bodyNodes = flattenBodyNodes(body);
+  walkBody(bodyNodes, '/data', binds, itext, model as XmlNode, fields);
 
   return { formId, fields, fieldCount: fields.length };
 }

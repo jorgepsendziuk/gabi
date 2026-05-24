@@ -20,6 +20,7 @@ import { resolvePageScope } from '../services/page-access.js';
 import { ForbiddenError } from '@gabi/core';
 import { getConnectionPool, getDefaultConnectionId, getConnectionById } from '../services/connections.js';
 import { inferOdkDataSourceFlags } from '../services/odk-overlay.js';
+import { loadOdkColumnLabels } from '../services/odk-labels.js';
 import { writeAudit } from '../middleware/audit.js';
 
 export const generatorRouter = Router();
@@ -203,6 +204,7 @@ generatorRouter.post(
         }
 
         const odkFlags = inferOdkDataSourceFlags(table, true);
+        const columnLabels = await loadOdkColumnLabels(pool, table, Boolean(conn.is_odk_source));
         const scopeResolved = resolvePageScope('global', req.user?.id);
         const generated = generatePage({
           connectionId,
@@ -214,6 +216,7 @@ generatorRouter.post(
           ownerUserId: scopeResolved.ownerUserId,
           odkReadOnly: odkFlags.odkReadOnly,
           recordKeyColumn: odkFlags.recordKeyColumn,
+          columnLabels,
         });
 
         await saveDataSource(generated.dataSource);
@@ -295,6 +298,7 @@ generatorRouter.post(
         ? inferOdkDataSourceFlags(table, true)
         : { odkReadOnly: false as const, recordKeyColumn: undefined };
 
+      const columnLabels = await loadOdkColumnLabels(pool, table, Boolean(conn.is_odk_source));
       const scopeResolved = resolvePageScope(body.scope, req.user?.id);
       const generated = generatePage({
         connectionId,
@@ -306,6 +310,7 @@ generatorRouter.post(
         ownerUserId: scopeResolved.ownerUserId,
         odkReadOnly: odkFlags.odkReadOnly,
         recordKeyColumn: odkFlags.recordKeyColumn,
+        columnLabels,
       });
 
       await saveDataSource(generated.dataSource);
@@ -355,6 +360,7 @@ generatorRouter.post(
         ? inferOdkDataSourceFlags(table, true)
         : { odkReadOnly: false as const, recordKeyColumn: undefined };
 
+      const columnLabels = await loadOdkColumnLabels(pool, table, Boolean(conn.is_odk_source));
       const scopeResolved = resolvePageScope(body.scope, req.user?.id);
       const generated = generatePage({
         connectionId,
@@ -366,6 +372,7 @@ generatorRouter.post(
         ownerUserId: scopeResolved.ownerUserId,
         odkReadOnly: odkFlags.odkReadOnly,
         recordKeyColumn: odkFlags.recordKeyColumn,
+        columnLabels,
       });
 
       await saveDataSource(generated.dataSource);
