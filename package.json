@@ -5,7 +5,7 @@
   "description": "GABI — Geo-Aplicações & Business Intelligence Framework",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "dev:turbo": "turbo dev",
+    "dev:all": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",

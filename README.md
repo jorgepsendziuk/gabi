@@ -67,16 +67,22 @@ No admin: **Conexões** → host, database, usuário, senha → **Testar** → *
 
 Em **Banco de dados**, escolha a conexão e gere **Lista** / **Mapa** para as tabelas desejadas.
 
-### 5. Rodar em desenvolvimento
+### 5. Rodar em desenvolvimento (front + back, um comando)
 
 ```bash
 pnpm dev
 ```
 
+Sobe **API** e **Admin** juntos (monorepo / Turborepo). Na primeira vez pode demorar um pouco enquanto compila os pacotes do workspace.
+
 - **Admin:** http://localhost:5173  
 - **API:** http://localhost:4000/health  
 
+O Vite faz proxy de `/api` → `:4000` (não precisa de `VITE_API_URL` em dev).
+
 **Login padrão:** `admin@gabi.local` / `admin123`
+
+Para subir também os `tsc --watch` de todos os pacotes: `pnpm dev:all`
 
 ## Deploy na Vercel (admin + API no mesmo domínio)
 
